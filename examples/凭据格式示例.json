@@ -1,0 +1,7 @@
+{
+  "管理页面": "https://gateway.example.com",
+  "用户名": "REPLACE_ME",
+  "密码": "REPLACE_ME",
+  "服务器别名": "my-gateway",
+  "远端安装目录": "/opt/my-gateway"
+}

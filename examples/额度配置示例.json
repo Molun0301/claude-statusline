@@ -1,0 +1,5 @@
+{
+  "base_url": "https://gateway.example.com",
+  "vm_id": "example-vm",
+  "credentials_file": "/absolute/path/to/private-credentials.json"
+}

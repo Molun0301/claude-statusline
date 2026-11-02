@@ -1,0 +1,13 @@
+{
+  "name": "molun-statusline",
+  "owner": {
+    "name": "Molun0301"
+  },
+  "plugins": [
+    {
+      "name": "account-statusline",
+      "source": "./"
+    }
+  ],
+  "description": "Claude 多账户状态栏安装指导"
+}

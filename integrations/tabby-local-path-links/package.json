@@ -1,0 +1,11 @@
+{
+  "name": "tabby-local-path-links",
+  "version": "1.1.0",
+  "description": "让本地终端的文件路径和 Claude 状态栏额度三角可点击",
+  "keywords": [
+    "tabby-plugin"
+  ],
+  "main": "index.js",
+  "author": "ml",
+  "license": "MIT"
+}

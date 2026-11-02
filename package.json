@@ -1,0 +1,13 @@
+{
+  "name": "claude-statusline",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Claude 状态栏：上下文、会话账户额度和保活计数",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

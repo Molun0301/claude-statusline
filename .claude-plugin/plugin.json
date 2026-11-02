@@ -1,0 +1,9 @@
+{
+  "name": "account-statusline",
+  "version": "1.0.0",
+  "description": "安装与管理 Claude 多账户状态栏。",
+  "author": {
+    "name": "Molun0301"
+  },
+  "license": "MIT"
+}
