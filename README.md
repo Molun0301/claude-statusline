@@ -2,6 +2,8 @@
 
 显示模型、目录、Git（版本管理工具）分支、上下文占用、keepwarm 次数，以及当前会话实际使用账户的 5 小时 / 7 天额度。额度来自用户自己的 vm2api 网关，按会话请求记录与账户身份核对，归属不明时显示“待确认”。
 
+格式为 `模型 │ 目录 ⎇ 分支 │ ● kw:本轮:累计 │ ▸ SubAgent:运行:总数 │ ctx … │ ▸ 虚拟机 5h … │ 7d …`，计数一律当前在前、总数在后，各模块按终端宽度只在模块之间换行，额度的 5h 与 7d 属于同一模块，终端窄到单独一行也放不下时才按列对齐拆成两行。额度展开后当前与其余虚拟机另起一张按列对齐的表，单行放不下时每台拆成 5h、7d 两行；SubAgent 展开后列出未在运行的子代理及其保活状态，运行中的子代理显示在 Claude 原生面板。
+
 支持 Linux 和 macOS 的命令型状态栏；需要 Python 3.10+、Node.js 18+。当前验证环境是 Linux、Node.js 24、Claude Code 2.1.316。账户展开点击依赖终端支持，可选 Tabby 适配器随仓库提供。
 
 ## 安装
@@ -36,7 +38,8 @@ python3 scripts/install.py install
 按会话手动切换展开：
 
 ```bash
-node ~/.claude/statusline-accounts.js --handle-uri claude-quota://toggle/你的会话ID
+node ~/.claude/statusline-accounts.js --handle-uri claude-quota://toggle/你的会话ID     # 额度
+node ~/.claude/statusline-accounts.js --handle-uri claude-quota://keepwarm/你的会话ID   # SubAgent
 ```
 
 Tabby 用户可安装可选组件：
@@ -62,10 +65,10 @@ python3 scripts/install.py uninstall
 
 更新保留凭据、额度配置和缓存。若自己改过插件文件，安装器会报告冲突；核对后用 `--replace`。卸载恢复仍由本插件持有的状态栏设置，保留用户后来修改的设置和文件。私密凭据与缓存可在确认其他插件不再使用后自行删除。
 
-固定版本或回退：`git fetch origin --tags`，`git checkout v1.0.0`，再运行安装命令。
+固定版本或回退：`git fetch origin --tags`，`git checkout v1.1.0`，再运行安装命令。
 
 ## 维护
 
 `python3 scripts/check.py` 运行模拟网关、慢网络后台生命周期、终端点击与安装配置恢复测试，不连接个人网关。
 
-版本 `1.0.0`，MIT 许可。[维护与发布](docs/公开文档/维护与发布.md) · [更新记录](docs/公开文档/更新记录.md)。
+版本 `1.1.0`，MIT 许可。[维护与发布](docs/公开文档/维护与发布.md) · [更新记录](docs/公开文档/更新记录.md)。

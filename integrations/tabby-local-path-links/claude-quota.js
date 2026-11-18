@@ -1,7 +1,7 @@
 'use strict'
 const { spawn } = require('node:child_process')
 
-const URI_PATTERN = /^claude-quota:\/\/toggle\/[a-zA-Z0-9_-]{1,128}$/
+const URI_PATTERN = /^claude-quota:\/\/(?:toggle|keepwarm)\/[a-zA-Z0-9_-]{1,128}$/
 const path = require('node:path')
 const os = require('node:os')
 const NODE = process.env.CLAUDE_STATUSLINE_NODE || 'node'

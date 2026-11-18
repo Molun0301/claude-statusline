@@ -26,11 +26,14 @@ test('Tabby 点击三角直接分发给本地额度控制器，不需要修饰�
   assert.deepEqual(args, [path.join(configDir, 'statusline-accounts.js'), '--handle-uri', 'claude-quota://toggle/test-session']);
   assert.equal(options.stdio, 'ignore'); assert.equal(options.shell, undefined);
   assert.equal(options.env.CLAUDE_CONFIG_DIR, configDir);
+  h.handler.activate(event, 'claude-quota://keepwarm/test-session');
+  assert.equal(h.launched[1][1][2], 'claude-quota://keepwarm/test-session');
 });
 
 test('仅允许状态栏精确格式，拒绝其它协议、编码和路径折叠', () => {
   const h = fixture();
   for (const uri of ['claude-quota://toggle/../bad', 'claude-quota://toggle/%2ebad', 'claude-quota://toggle/id?x=1',
+    'claude-quota://keepwarm/../bad', 'claude-quota://keepwarm/id?x=1', 'claude-quota://keepwarm/id\n',
     'claude-quota://other/id', 'javascript:alert(1)', 'file://server/share', 'unknown://test', 'not a url']) h.handler.activate({}, uri);
   h.handler.activate({ button: 2 }, 'claude-quota://toggle/id');
   assert.equal(h.launched.length, 0); assert.equal(h.forwarded.length, 0);
@@ -42,6 +45,13 @@ test('普通 HTTP 链接继续交给 Tabby 原处理器', () => {
   h.handler.activate(event, 'http://127.0.0.1:1234/');
   assert.equal(h.forwarded.length, 2); assert.equal(h.launched.length, 0);
   assert.equal(h.handler.hover, h.original.hover);
+});
+
+test('子代理开关链接与额度三角走同一处理器，点击一次切换一次', () => {
+  const h = fixture();
+  const uri = 'claude-quota://toggle/kw_a1000000-0000-4000-a000-000000000001';
+  h.handler.activate({ button: 0, preventDefault() {}, stopPropagation() {} }, uri);
+  assert.deepEqual(h.launched.map(call => call[1][2]), [uri]);
 });
 
 test('插件安装到本地终端，兼容内置插件加载顺序；卸载时恢复处理器', async () => {

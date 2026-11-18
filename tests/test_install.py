@@ -43,6 +43,7 @@ class InstallTests(unittest.TestCase):
                 run('scripts/install.py', 'install', *args, '--replace')
                 data = json.loads(file.read_text());self.assertEqual(data['env'], original['env'])
                 command = data['statusLine']['command']
+                self.assertEqual(data['subagentStatusLine']['command'], command + ' --subagents')
                 rendered = subprocess.run(command, shell=True, input='{}', text=True, env=env, capture_output=True)
                 self.assertEqual(rendered.returncode, 0, rendered.stderr)
                 self.assertIn('账户待确认', rendered.stdout)

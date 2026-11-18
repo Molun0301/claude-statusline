@@ -97,14 +97,55 @@ test('实际会话归属、双账户、并发缓存、故障与交互完整验�
     routeFailure = true; result = await render('s2', 2); assert.match(result.text, /账户待确认/); routeFailure = false;
     console.log('通过：未知会话、返回其它会话及路由接口失败均显示待确认，不拿固定槽或旧路由顶替。');
     let toggled = await command([controller, '--handle-uri', 'claude-quota://toggle/s1'], env); assert.equal(toggled.code, 0);
-    result = await render('s1', 4); assert.match(result.text, /○ 虚拟机一 5h 31%/); assert.match(result.text, /▾ 虚拟机二 5h/); assert.equal((result.text.match(/虚拟机二 5h/g) || []).length, 1); assert(!/全部额度|收起额度/.test(result.text));
+    result = await render('s1', 4); assert.match(result.text, /○ 虚拟机一 +5h +31%/); assert.match(result.text, /▾ 虚拟机二 5h/);
+    const lines = result.text.split('\n'), current = lines.find(line => line.includes('▾ 虚拟机二')), other = lines.find(line => line.includes('○ 虚拟机一'));
+    for (const column of ['5h', '│ 7d']) assert.equal(strWidth(current.slice(0, current.indexOf(column))), strWidth(other.slice(0, other.indexOf(column))), `${column} 列未对齐`); assert.equal((result.text.match(/虚拟机二 5h/g) || []).length, 1); assert(!/全部额度|收起额度/.test(result.text));
     assert(!strip((await render('s2', 3)).out).includes('○ 虚拟机一'));
     const narrow = await render('s1', 4, 70);
     for (const line of narrow.out.split('\n')) assert(strWidth(line) <= 66, `换行宽度 ${strWidth(line)}`);
+    // 单行放不下时每台虚拟机拆成 5h、7d 两行，标签与百分比仍在同一列。
+    const split = strip(narrow.out).split('\n').filter(line => / (5h|7d) +\d+%/.test(line));
+    assert(split.length >= 4 && new Set(split.map(line => strWidth(line.slice(0, line.search(/ (5h|7d) /))))).size === 1);
+    // Claude 会去掉行首空格，拆出的 7d 行必须以样式控制符开头才能保住缩进。
+    assert(narrow.out.split('\n').filter(line => / 7d /.test(line) && !/ 5h /.test(line)).every(line => line.startsWith('\x1b[0m ')));
     await command([controller, '--handle-uri', 'claude-quota://toggle/s1'], env);
     result = await render('s1', 4); assert(!result.text.includes('○ 虚拟机一')); assert.match(result.text, /▸ 虚拟机二 5h/);
+    // 额度的 5h 与 7d 是同一模块：放不下时整体另起一行，不在中间断开；窄到单独一行也放不下时按对齐表拆行。
+    for (const columns of [110, 150]) {
+      const line = strip((await render('s1', 4, columns)).out).split('\n').find(row => row.includes(' 5h '));
+      assert.match(line, / 5h .*│ 7d /);
+    }
+    const tight = strip((await render('s1', 4, 70)).out).split('\n');
+    assert(tight.every(row => strWidth(row) <= 66));
+    assert.equal(strWidth(tight.find(row => / 5h /.test(row)).split(' 5h ')[0]), strWidth(tight.find(row => / 7d /.test(row)).split(' 7d ')[0]));
     assert.equal((await command([controller, '--handle-uri', 'claude-quota://toggle/../unsafe'], env)).code, 1);
     console.log('通过：展开只追加其余虚拟机，当前虚拟机仅出现一次，收起、会话隔离、窄终端换行与非法链接校验。');
+    const sessions = path.join(root, 'keepwarm/sessions');
+    fs.mkdirSync(sessions, { recursive: true });
+    for (const sid of ['s1', 's2']) fs.writeFileSync(path.join(sessions, sid + '.json'), JSON.stringify({
+      sessionId: sid, state: 'active', bumps: 6, mainRoundBumps: 2, conversationRound: 2,
+      agentViews: [
+        { id: 'done', label: '完成的代理', phase: 'completed', completedRound: 2 },
+        { id: 'old', label: '上一轮的代理', phase: 'completed', completedRound: 1 },
+        { id: 'killed', label: '取消的代理', phase: 'closed' },
+        { id: 'working', label: '模拟当前工作', phase: 'running' },
+      ],
+      targets: [{ id: 'done', bumps: 4, roundBumps: 1, workTurnId: 'done-turn' }],
+    }));
+    result = await render('s1', 4);
+    assert.match(result.text.split('\n')[0], /kw:2:6 │ ▸ SubAgent:1:4 │ ctx /);
+    assert.doesNotMatch(result.text, /完成的代理/);
+    assert.equal((await command([controller, '--handle-uri', 'claude-quota://keepwarm/s1'], env)).code, 0);
+    result = await render('s1', 4);
+    assert.match(result.text.split('\n')[0], /▾ SubAgent:1:4 │ ctx /);
+    assert.match(result.text, /\n● 完成的代理 +kw:1:4/);
+    assert.match(result.text, /\n○ 上一轮的代理 +kw:-:-/);
+    assert.match(result.text, /\n○ 取消的代理/);
+    assert.doesNotMatch(result.text, /模拟当前工作/);
+    assert.doesNotMatch(result.text, /○ 虚拟机一/);
+    assert.doesNotMatch((await render('s2', 3)).text, /完成的代理/);
+    await command([controller, '--handle-uri', 'claude-quota://keepwarm/s1'], env);
+    assert.doesNotMatch((await render('s1', 4)).text, /完成的代理/);
     const cachePath = path.join(root, 'cache/statusline-accounts/fleet.json');
     const fleet = JSON.parse(fs.readFileSync(cachePath)); fleet._tried = 0; fs.writeFileSync(cachePath, JSON.stringify(fleet));
     accountA = 'replacement-a'; routes.s1 = 'a'; result = await render('s1', 5); assert.match(result.text, /账户待确认/);
@@ -131,6 +172,29 @@ test('超链接按可见文字计算宽度，名称不会注入终端控制符',
   assert.equal(wrap(['123', link], 20).length, 1);
   assert.equal(cleanLabel('账户\n\x1b\x07\x9b'), '账户');
   assert.equal(toggleLink('../bad', false), '');
+});
+
+test('实际会话的子代理开关与额度开关同一种三角，走旧 Tabby 识别的路由，只切换子代理面板', async () => {
+  const { toggleLink } = require('../src/statusline-accounts.js');
+  const id = 'a1000000-0000-4000-a000-000000000001';
+  const button = toggleLink(id, false, 'keepwarm', ' SubAgent:0:2');
+  assert.equal(strip(button), '▸ SubAgent:0:2');
+  assert.equal(strip(toggleLink(id, true, 'keepwarm')), '▾');
+  const link = button.split(';;')[1].split('\x1b')[0];
+  assert.match(link, /^claude-quota:\/\/toggle\/[a-zA-Z0-9_-]{1,128}$/);
+  const root = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'kw-click-'));
+  const env = { ...process.env, CLAUDE_CONFIG_DIR: root };
+  const views = path.join(root, 'cache/statusline-accounts');
+  const kw = path.join(views, 'kw-view-' + id + '.json');
+  try {
+    for (const expanded of [true, false]) {
+      assert.equal((await command([controller, '--handle-uri', link], env)).code, 0);
+      assert.equal(JSON.parse(fs.readFileSync(kw)).expanded, expanded);
+    }
+    assert.equal(fs.existsSync(path.join(views, 'view-' + id + '.json')), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('路由精确核对入站会话，忽略失败请求与出站会话误命中', async () => {

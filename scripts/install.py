@@ -14,7 +14,7 @@ p.add_argument('--replace', action='store_true', help='替换已有文件/状态
 a = p.parse_args()
 try:
     directory = a.config_dir.expanduser().absolute()
-    install = Installation(directory, 'claude-statusline', '1.0.0')
+    install = Installation(directory, 'claude-statusline', '1.1.0')
     settings = directory / 'settings.json'
     if a.action == 'uninstall':
         install.uninstall(settings)
@@ -22,14 +22,20 @@ try:
         node = shutil.which('node')
         if not node:
             raise ValueError('需要先安装 Node.js 18 或更新版本')
-        value = {'type': 'command', 'command': 'CLAUDE_CONFIG_DIR=' + shlex.quote(str(directory)) + ' ' + shlex.quote(node) + ' ' + shlex.quote(str(directory / 'local-statusline.js')), 'refreshInterval': 2}
+        command = 'CLAUDE_CONFIG_DIR=' + shlex.quote(str(directory)) + ' ' + shlex.quote(node) + ' ' + shlex.quote(str(directory / 'local-statusline.js'))
+        fields = {
+            'statusLine': {'type': 'command', 'command': command, 'refreshInterval': 2},
+            'subagentStatusLine': {'type': 'command', 'command': command + ' --subagents'},
+        }
         current = read_json(settings)
-        old = install.state['settings'].get('statusLine')
-        if current.get('statusLine') not in (None, value) and not a.replace and (not old or current['statusLine'] != old['installed']):
-            raise ValueError('已有其他状态栏；确认替换时加 --replace，卸载会恢复原设置')
+        for key, value in fields.items():
+            old = install.state['settings'].get(key)
+            if key in current and current[key] != value and not a.replace and (not old or current[key] != old['installed']):
+                raise ValueError(f'已有其他 {key} 设置；确认替换时加 --replace，卸载会恢复原设置')
         files = {f.name: f.read_bytes() for f in (ROOT / 'src').glob('*.js')}
         install.install(files, a.replace)
-        install.set_field(settings, 'statusLine', value, a.replace)
+        for key, value in fields.items():
+            install.set_field(settings, key, value, a.replace)
     print(f'{a.action} 完成：{directory}；重新打开 Claude 会话后生效')
 except (ValueError, OSError) as exc:
     p.exit(1, str(exc) + '\n')

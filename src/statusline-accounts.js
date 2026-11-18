@@ -16,8 +16,9 @@ const TTL = 29_500;
 const STALE = 600_000;
 const TIMEOUT = 15_000;
 const validSession = id => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id);
+const uuidSession = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const routeFile = id => path.join(ROOT, `route-${id}.json`);
-const viewFile = id => path.join(ROOT, `view-${id}.json`);
+const viewFile = (id, panel) => path.join(ROOT, `${panel === 'keepwarm' ? 'kw-view' : 'view'}-${id}.json`);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const sourceOf = config => `vm2api-accounts-v1:${config.baseUrl}`;
 
@@ -113,7 +114,7 @@ function snapshot(sessionId, config = readConfig(DIR), now = Date.now()) {
   const selected = route.data && now - route._ts < STALE ? accounts.find(vm =>
     vm.vm_id === route.data.vm_id && vm.account_id === route.data.account_id) : null;
   return { accounts, selected: selected || null, route: selected ? route.data : null,
-    expanded: validSession(sessionId) && readJson(viewFile(sessionId))?.expanded === true,
+    expanded: isExpanded(sessionId),
     cached: !!fleet._error, fleet, routeCache: route };
 }
 
@@ -144,26 +145,27 @@ async function quota(sessionId, marker = '') {
   return snapshot(sessionId, config);
 }
 
-function toggle(sessionId) {
+function isExpanded(sessionId, panel) {
+  return validSession(sessionId) && readJson(viewFile(sessionId, panel))?.expanded === true;
+}
+
+function toggle(sessionId, panel) {
   if (!validSession(sessionId)) throw new Error('quota_invalid_session');
-  const file = viewFile(sessionId);
-  const expanded = readJson(file)?.expanded !== true;
+  const file = viewFile(sessionId, panel);
+  const expanded = !isExpanded(sessionId, panel);
   writePrivateJson(file, { expanded, updated_at: Date.now() });
   return expanded;
 }
 
 function handleUri(uri) {
-  // 在 URL 规范化之前拒绝路径折叠和编码，处理器只接受自身生成的精确格式。
-  if (typeof uri !== 'string' || !/^claude-quota:\/\/toggle\/[a-zA-Z0-9_-]{1,128}$/.test(uri)) {
-    throw new Error('quota_invalid_link');
+  // 仅接收两种原始链接，拒绝路径折叠、编码和查询参数。
+  const link = typeof uri === 'string' && /^claude-quota:\/\/(toggle|keepwarm)\/([a-zA-Z0-9_-]{1,128})$/.exec(uri);
+  if (!link) throw new Error('quota_invalid_link');
+  const key = link[2];
+  if (link[1] === 'toggle' && key.startsWith('kw_') && uuidSession.test(key.slice(3))) {
+    return toggle(key.slice(3), 'keepwarm');
   }
-  let url;
-  try { url = new URL(uri); } catch (_) { throw new Error('quota_invalid_link'); }
-  if (url.protocol !== 'claude-quota:' || url.hostname !== 'toggle' || url.username || url.password ||
-      url.port || url.search || url.hash || !/^\/[a-zA-Z0-9_-]{1,128}$/.test(url.pathname)) {
-    throw new Error('quota_invalid_link');
-  }
-  return toggle(url.pathname.slice(1));
+  return toggle(key, link[1]);
 }
 
 function cleanLabel(value) {
@@ -171,10 +173,13 @@ function cleanLabel(value) {
   return String(value || '').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim().slice(0, 64);
 }
 
-function toggleLink(sessionId, expanded) {
+function toggleLink(sessionId, expanded, panel, title = '') {
   if (!validSession(sessionId)) return '';
-  const label = expanded ? '▾' : '▸';
-  return `\x1b]8;;claude-quota://toggle/${sessionId}\x1b\\${label}\x1b]8;;\x1b\\`;
+  // 已运行的 Tabby 只识别 toggle 路由。Claude 会话使用 UUID，带 kw_ 的标识可与额度链接区分。
+  const destination = panel !== 'keepwarm' ? `toggle/${sessionId}`
+    : uuidSession.test(sessionId) ? `toggle/kw_${sessionId}` : `keepwarm/${sessionId}`;
+  const label = (expanded ? '▾' : '▸') + title;
+  return `\x1b]8;;claude-quota://${destination}\x1b\\${label}\x1b]8;;\x1b\\`;
 }
 
 if (require.main === module) {
@@ -189,4 +194,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { quota, refresh, snapshot, toggle, handleUri, toggleLink, cleanLabel, validSession };
+module.exports = { quota, refresh, snapshot, toggle, handleUri, toggleLink, isExpanded, cleanLabel, validSession };
